@@ -25,8 +25,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
+          npm install
           npm install -g @aws-amplify/cli
-          npm ci
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -37,7 +37,7 @@ jobs:
 
       - name: Pull Amplify Environment
         run: |
-          amplify pull --appId ${{ secrets.AMPLIFY_APP_ID }} --envName ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }} -y
+          amplify pull --appId ${{ secrets.AMPLIFY_APP_ID }} --envName ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }} -y
 
       - name: Deploy to AWS Amplify
         run: |
@@ -45,6 +45,6 @@ jobs:
             echo "Running tests only for PR"
             amplify status
           else
-            echo "Deploying to ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}"
+            echo "Deploying to ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}"
             amplify push -y
           fi

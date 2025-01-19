@@ -230,7 +230,7 @@
         "ResponseMappingTemplate": "$util.toJson($ctx.result)"
       }
     },
-    "QueryByIdeaIdResolver": {
+    "QueryCommentsByIdeaIdResolver": {
       "Type": "AWS::AppSync::Resolver",
       "Properties": {
         "ApiId": { "Ref": "AppSyncApiId" },
@@ -244,8 +244,13 @@
             "    \"operation\": \"Query\",",
             "    \"index\": \"byIdeaId\",",
             "    \"query\": {",
-            "        \"expression\": \"ideaId = :ideaId\",",
+            "        \"expression\": \"#type = :type AND #ideaId = :ideaId\",",
+            "        \"expressionNames\": {",
+            "            \"#type\": \"type\",",
+            "            \"#ideaId\": \"ideaId\"",
+            "        },",
             "        \"expressionValues\": {",
+            "            \":type\": $util.dynamodb.toDynamoDBJson(\"COMMENT\"),",
             "            \":ideaId\": $util.dynamodb.toDynamoDBJson($ctx.args.ideaId)",
             "        }",
             "    }",

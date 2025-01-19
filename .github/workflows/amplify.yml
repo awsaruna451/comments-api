@@ -37,7 +37,7 @@ jobs:
 
       - name: Pull Amplify Environment
         run: |
-          amplify pull --appId ${{ secrets.AMPLIFY_APP_ID }} --envName ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }} -y
+          amplify pull --appId ${{ secrets.AMPLIFY_APP_ID }} --envName dev -y
 
       - name: Deploy to AWS Amplify
         run: |
@@ -45,6 +45,6 @@ jobs:
             echo "Running tests only for PR"
             amplify status
           else
-            echo "Deploying to ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}"
+            echo "Deploying to dev environment"
             amplify push -y
           fi

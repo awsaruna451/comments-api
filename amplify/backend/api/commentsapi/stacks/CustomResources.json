@@ -1,0 +1,287 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "API configuration for comments and replies",
+  "Parameters": {
+    "AppSyncApiId": {
+      "Type": "String",
+      "Description": "The id of the AppSync API associated with this project."
+    },
+    "AppSyncApiName": {
+      "Type": "String",
+      "Description": "The name of the AppSync API",
+      "Default": "AppSyncSimpleTransform"
+    },
+    "env": {
+      "Type": "String",
+      "Description": "Environment name"
+    }
+  },
+  "Resources": {
+    "CommentAndReplyTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::Join": ["-", ["CommentAndReply", {"Ref": "env"}]]
+        },
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "type",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "ideaId",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "commentId",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "GlobalSecondaryIndexes": [
+          {
+            "IndexName": "byType",
+            "KeySchema": [
+              {
+                "AttributeName": "type",
+                "KeyType": "HASH"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            }
+          },
+          {
+            "IndexName": "byIdeaId",
+            "KeySchema": [
+              {
+                "AttributeName": "ideaId",
+                "KeyType": "HASH"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            }
+          },
+          {
+            "IndexName": "byComment",
+            "KeySchema": [
+              {
+                "AttributeName": "commentId",
+                "KeyType": "HASH"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            }
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    },
+    "CommentAndReplyDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": { "Ref": "AppSyncApiId" },
+        "Name": "CommentAndReplyTable",
+        "Type": "AMAZON_DYNAMODB",
+        "ServiceRoleArn": { "Fn::GetAtt": ["CommentAndReplyTableRole", "Arn"] },
+        "DynamoDBConfig": {
+          "TableName": { "Ref": "CommentAndReplyTable" },
+          "AwsRegion": { "Ref": "AWS::Region" }
+        }
+      }
+    },
+    "CommentAndReplyTableRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "appsync.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "DynamoDBAccess",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan"
+                  ],
+                  "Resource": [
+                    { "Fn::GetAtt": ["CommentAndReplyTable", "Arn"] },
+                    { "Fn::Join": ["", [{ "Fn::GetAtt": ["CommentAndReplyTable", "Arn"] }, "/index/*"]] }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "AddNewCommentResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": { "Ref": "AppSyncApiId" },
+        "TypeName": "Mutation",
+        "FieldName": "addNewComment",
+        "DataSourceName": { "Fn::GetAtt": ["CommentAndReplyDataSource", "Name"] },
+        "RequestMappingTemplate": {
+          "Fn::Join": ["\n", [
+            "{",
+            "    \"version\": \"2018-05-29\",",
+            "    \"operation\": \"PutItem\",",
+            "    \"key\": {",
+            "        \"id\": $util.dynamodb.toDynamoDBJson($util.autoId())",
+            "    },",
+            "    \"attributeValues\": {",
+            "        \"type\": $util.dynamodb.toDynamoDBJson(\"COMMENT\"),",
+            "        \"text\": $util.dynamodb.toDynamoDBJson($ctx.args.input.text),",
+            "        #if($ctx.args.input.addedBy) \"addedBy\": $util.dynamodb.toDynamoDBJson($ctx.args.input.addedBy), #end",
+            "        \"dateTime\": $util.dynamodb.toDynamoDBJson($util.defaultIfNull($ctx.args.input.dateTime, $util.time.nowISO8601())),",
+            "        #if($ctx.args.input.ideaId) \"ideaId\": $util.dynamodb.toDynamoDBJson($ctx.args.input.ideaId), #end",
+            "        \"__typename\": $util.dynamodb.toDynamoDBJson(\"Comment\")",
+            "    }",
+            "}"
+          ]]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.result)"
+      }
+    },
+    "ListAllCommentsResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": { "Ref": "AppSyncApiId" },
+        "TypeName": "Query",
+        "FieldName": "listAllComments",
+        "DataSourceName": { "Fn::GetAtt": ["CommentAndReplyDataSource", "Name"] },
+        "RequestMappingTemplate": {
+          "Fn::Join": ["\n", [
+            "{",
+            "    \"version\": \"2018-05-29\",",
+            "    \"operation\": \"Query\",",
+            "    \"index\": \"byType\",",
+            "    \"query\": {",
+            "        \"expression\": \"#type = :type\",",
+            "        \"expressionNames\": {",
+            "            \"#type\": \"type\"",
+            "        },",
+            "        \"expressionValues\": {",
+            "            \":type\": $util.dynamodb.toDynamoDBJson(\"COMMENT\")",
+            "        }",
+            "    }",
+            "}"
+          ]]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.result.items)"
+      }
+    },
+    "AddNewReplyResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": { "Ref": "AppSyncApiId" },
+        "TypeName": "Mutation",
+        "FieldName": "addNewReply",
+        "DataSourceName": { "Fn::GetAtt": ["CommentAndReplyDataSource", "Name"] },
+        "RequestMappingTemplate": {
+          "Fn::Join": ["\n", [
+            "{",
+            "    \"version\": \"2018-05-29\",",
+            "    \"operation\": \"PutItem\",",
+            "    \"key\": {",
+            "        \"id\": $util.dynamodb.toDynamoDBJson($util.autoId())",
+            "    },",
+            "    \"attributeValues\": {",
+            "        \"type\": $util.dynamodb.toDynamoDBJson(\"REPLY\"),",
+            "        \"text\": $util.dynamodb.toDynamoDBJson($ctx.args.input.text),",
+            "        #if($ctx.args.input.addedBy) \"addedBy\": $util.dynamodb.toDynamoDBJson($ctx.args.input.addedBy), #end",
+            "        \"dateTime\": $util.dynamodb.toDynamoDBJson($util.defaultIfNull($ctx.args.input.dateTime, $util.time.nowISO8601())),",
+            "        \"commentId\": $util.dynamodb.toDynamoDBJson($ctx.args.input.commentId),",
+            "        #if($ctx.args.input.ideaId) \"ideaId\": $util.dynamodb.toDynamoDBJson($ctx.args.input.ideaId), #end",
+            "        \"__typename\": $util.dynamodb.toDynamoDBJson(\"Reply\")",
+            "    }",
+            "}"
+          ]]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.result)"
+      }
+    },
+    "QueryByIdeaIdResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": { "Ref": "AppSyncApiId" },
+        "TypeName": "Query",
+        "FieldName": "queryCommentsByIdeaId",
+        "DataSourceName": { "Fn::GetAtt": ["CommentAndReplyDataSource", "Name"] },
+        "RequestMappingTemplate": {
+          "Fn::Join": ["\n", [
+            "{",
+            "    \"version\": \"2018-05-29\",",
+            "    \"operation\": \"Query\",",
+            "    \"index\": \"byIdeaId\",",
+            "    \"query\": {",
+            "        \"expression\": \"ideaId = :ideaId\",",
+            "        \"expressionValues\": {",
+            "            \":ideaId\": $util.dynamodb.toDynamoDBJson($ctx.args.ideaId)",
+            "        }",
+            "    }",
+            "}"
+          ]]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.result.items)"
+      }
+    },
+    "ListAllRepliesResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": { "Ref": "AppSyncApiId" },
+        "TypeName": "Query",
+        "FieldName": "listAllReplies",
+        "DataSourceName": { "Fn::GetAtt": ["CommentAndReplyDataSource", "Name"] },
+        "RequestMappingTemplate": {
+          "Fn::Join": ["\n", [
+            "{",
+            "    \"version\": \"2018-05-29\",",
+            "    \"operation\": \"Query\",",
+            "    \"index\": \"byType\",",
+            "    \"query\": {",
+            "        \"expression\": \"#type = :type\",",
+            "        \"expressionNames\": {",
+            "            \"#type\": \"type\"",
+            "        },",
+            "        \"expressionValues\": {",
+            "            \":type\": $util.dynamodb.toDynamoDBJson(\"REPLY\")",
+            "        }",
+            "    }",
+            "}"
+          ]]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.result.items)"
+      }
+    }
+  }
+}

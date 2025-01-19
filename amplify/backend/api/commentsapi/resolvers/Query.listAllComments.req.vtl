@@ -1,0 +1,14 @@
+{
+    "version": "2018-05-29",
+    "operation": "Query",
+    "index": "byType",
+    "query": {
+        "expression": "#type = :type",
+        "expressionNames": {
+            "#type": "type"
+        },
+        "expressionValues": {
+            ":type": $util.dynamodb.toDynamoDBJson("COMMENT")
+        }
+    }
+}

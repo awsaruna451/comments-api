@@ -1,0 +1,50 @@
+name: 'Amplify CI/CD'
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+  pull_request:
+    branches:
+      - master
+      - develop
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm install -g @aws-amplify/cli
+          npm ci
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Pull Amplify Environment
+        run: |
+          amplify pull --appId ${{ secrets.AMPLIFY_APP_ID }} --envName ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }} -y
+
+      - name: Deploy to AWS Amplify
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Running tests only for PR"
+            amplify status
+          else
+            echo "Deploying to ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}"
+            amplify push -y
+          fi

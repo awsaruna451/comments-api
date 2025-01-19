@@ -1,0 +1,15 @@
+{
+    "version": "2018-05-29",
+    "operation": "PutItem",
+    "key": {
+        "id": $util.dynamodb.toDynamoDBJson($util.autoId())
+    },
+    "attributeValues": {
+        "type": $util.dynamodb.toDynamoDBJson("COMMENT"),
+        "text": $util.dynamodb.toDynamoDBJson($ctx.args.input.text),
+        #if($ctx.args.input.addedBy) "addedBy": $util.dynamodb.toDynamoDBJson($ctx.args.input.addedBy), #end
+        "dateTime": $util.dynamodb.toDynamoDBJson($util.defaultIfNull($ctx.args.input.dateTime, $util.time.nowISO8601())),
+        #if($ctx.args.input.ideaId) "ideaId": $util.dynamodb.toDynamoDBJson($ctx.args.input.ideaId), #end
+        "__typename": $util.dynamodb.toDynamoDBJson("Comment")
+    }
+}
